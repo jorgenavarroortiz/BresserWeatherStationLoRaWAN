@@ -16,7 +16,7 @@ A pull request has been submitted to the upstream repo with the new decoder.
 
 ## Example with a [BRESSER 7-in-1 ClimateConnect Tuya Smart Home Weather Station](https://www.bresser.de/en/Weather-Time/BRESSER-7-in-1-ClimateConnect-Tuya-Smart-Home-Weather-Station.html)
 
-<img src="https://user-images.githubusercontent.com/17797704/222539637-6bba56e6-e20b-474c-8229-e61a5b199a2c.png" width="384"> | <img src="https://user-images.githubusercontent.com/17797704/222829202-84db7081-6eb8-423d-b3fc-88ba173424ed.png" width="384">
+<img src="https://user-images.githubusercontent.com/17797704/222829202-84db7081-6eb8-423d-b3fc-88ba173424ed.png" width="384">   <img src="https://user-images.githubusercontent.com/17797704/222539637-6bba56e6-e20b-474c-8229-e61a5b199a2c.png" width="384">
 
 ![image](https://user-images.githubusercontent.com/17797704/222539809-b47126ac-325f-493c-9a34-5310eac34d75.png)
 
