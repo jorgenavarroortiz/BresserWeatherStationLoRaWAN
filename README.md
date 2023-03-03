@@ -16,13 +16,13 @@ A pull request has been submitted to the upstream repo with the new decoder.
 
 ## Example with a [BRESSER 7-in-1 ClimateConnect Tuya Smart Home Weather Station](https://www.bresser.de/en/Weather-Time/BRESSER-7-in-1-ClimateConnect-Tuya-Smart-Home-Weather-Station.html)
 
-<img src="https://user-images.githubusercontent.com/17797704/222829202-84db7081-6eb8-423d-b3fc-88ba173424ed.png" width="384">   <img src="https://user-images.githubusercontent.com/17797704/222539637-6bba56e6-e20b-474c-8229-e61a5b199a2c.png" width="384">
+<img src="https://user-images.githubusercontent.com/17797704/222539637-6bba56e6-e20b-474c-8229-e61a5b199a2c.png" width="384">
 
 ![image](https://user-images.githubusercontent.com/17797704/222539809-b47126ac-325f-493c-9a34-5310eac34d75.png)
 
 ## Example with a [BRESSER professional 7-in-1 Wi-Fi Weather Station with Light Intensity and UV Measurement Function](https://www.bresser.de/en/Weather-Time/Weather-Center/BRESSER-professional-7-in-1-Wi-Fi-Weather-Station-with-Light-Intensity-and-UV-Measurement-Function.html)
 
-<img src="https://user-images.githubusercontent.com/17797704/222445129-3bb9ef83-785b-44b3-a460-8177400c067e.png" width="384">
+<img src="https://user-images.githubusercontent.com/17797704/222829202-84db7081-6eb8-423d-b3fc-88ba173424ed.png" width="384">   <img src="https://user-images.githubusercontent.com/17797704/222445129-3bb9ef83-785b-44b3-a460-8177400c067e.png" width="384">
 
 ![image](https://user-images.githubusercontent.com/17797704/222444791-03e4de29-71d9-454a-a23b-e7c39dc7e63d.png)
 
