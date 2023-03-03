@@ -1,0 +1,17 @@
+compile:
+  libraries:
+    - mqtt
+    - RadioLib
+    - ArduinoJson
+  platforms:
+    - esp32
+    - esp8266
+
+unittest:
+  libraries:
+    - mqtt
+    - RadioLib
+    - ArduinoJson
+  platforms:
+    - esp32
+    - esp8266
