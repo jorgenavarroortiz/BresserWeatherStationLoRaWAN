@@ -35,5 +35,5 @@ In order to include the Bresser 7-in-1 decoder, I employed the [decoder from RTL
 
 ## Example showing TTN console and Arduino serial port
 
-![image](https://user-images.githubusercontent.com/17797704/224826387-3b5e05c5-f5ff-4114-ac8c-e50dc92188d2.png)
+![image](https://user-images.githubusercontent.com/17797704/224828519-ee3e1c84-b222-447b-b783-4c6578a8aea7.png)
 
