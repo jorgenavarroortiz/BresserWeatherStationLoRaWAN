@@ -3,7 +3,7 @@
 Module:  BresserLoRaWAN.ino
 
 Author:
-    Jorge Navarro-Ortiz
+    Jorge Navarro-Ortiz (jorgenavarro@ugr.es), University of Granada, 2023
 
 Features:
   - Bresser 7-in-1 decoder
@@ -109,6 +109,12 @@ bool sleepReq = false;
 std::int32_t tBoot;
 std::uint32_t lastTimeWDTReset;
 
+// Arduino IDE: Tools->Core Debug Level: "Debug|Verbose"
+//#define CORE_DEBUG_LEVEL ARDUHAL_LOG_LEVEL_DEBUG
+//#define CORE_DEBUG_LEVEL ARDUHAL_LOG_LEVEL_VERBOSE
+
+#define DEBUG_PRINTF(...) \
+  { Serial.printf(__VA_ARGS__); }
 
 /****************************************************************************\
 |
@@ -222,12 +228,13 @@ void checkGoingToSleep(void) {
   if (sleepReq) {
       // Going to deep sleep requested after LoRaWAN transmission complete
       std::int32_t timeToSleep = intervalBetweenTransmissions - timeFromBoot; // ms
-      if (timeToSleep < minimumDeepSleepTime)
+      if (timeToSleep < minimumDeepSleepTime) {
           timeToSleep = minimumDeepSleepTime;
-
-      log_d("Requested going to deep sleep after LoRaWAN transmission complete! Sleep time is %d ms.", timeToSleep);
-      log_d("Minimum sleep time is %d ms.", minimumDeepSleepTime);
-      log_d("Shutdown()");
+        log_d("Requested going to deep sleep after LoRaWAN transmission complete! Sleep time is set to its minimum value (%d ms).", minimumDeepSleepTime);
+      } else {
+        log_d("Requested going to deep sleep after LoRaWAN transmission complete! Sleep time is %d ms.", timeToSleep);
+      }
+      log_d("LoRaWAN.Shutdown()");
 
       myLoRaWAN.Shutdown();
       delay(2000);
@@ -238,7 +245,7 @@ void checkGoingToSleep(void) {
       // Too much time awake!
 
       log_d("Max awake timer expired! (time from boot %d ms, max awake time %d ms)");
-      log_d("Shutdown()");
+      log_d("LoRaWAN.Shutdown()");
 
       myLoRaWAN.Shutdown();
       delay(2000);
@@ -275,56 +282,46 @@ void setup() {
     {
       // First time after powering on the board... RTCWDT_RTC_RESET=16, i.e. RTC Watch dog reset digital core and rtc module
       delay(2000); // So the following messages are shown in Arduino's serial monitor...
-      log_d("Power on reset (%d)", resetReason);
-	    bootCount = 1;
+      log_d("Power on reset (reason %d)", resetReason);
+	    bootCount = 0;
     } else if (resetReason == TG0WDT_SYS_RESET || resetReason == DEEPSLEEP_RESET || resetReason == SW_RESET) {
-      log_d("Reset due to deep sleep (%d)", resetReason);
+      log_d("Reset due to deep sleep (reason %d)", resetReason);
       bootCount++;
     } else {
       // Other reasons should be problematic...
-      log_d("Other reason for reset (%d), erasing LoRaWAN state...", resetReason);
+      log_d("Other reason for reset (reason %d), erasing LoRaWAN state...", resetReason);
       bootCount++;
       magicFlag1 = 0;
       magicFlag2 = 0;
     }
+    log_d("Boot count: %d", bootCount);
 
-    if ((bootCount % noResetsToEraseLoRaWANState) == 0) {
-      log_d("Erasing LoRaWAN state after %d resets...", noResetsToEraseLoRaWANState);
-      magicFlag1 = 0;
-      magicFlag2 = 0;
-#if defined(ARDUINO_heltec_wireless_stick)
-      // LoRa: reset chip
-      log_d("Reseting the LoRa chip after %d reboots (current reboot %d)...", noResetsToEraseLoRaWANState, bootCount);
-      pinMode(PIN_LMIC_RST, OUTPUT);
-      digitalWrite(PIN_LMIC_RST, LOW);
-      delay(100);
-      digitalWrite(PIN_LMIC_RST, HIGH);
-#endif
-    }
+//     if ((bootCount % noResetsToEraseLoRaWANState) == 0) {
+//       log_d("Erasing LoRaWAN state after %d resets...", noResetsToEraseLoRaWANState);
+//       magicFlag1 = 0;
+//       magicFlag2 = 0;
+//#if defined(ARDUINO_heltec_wireless_stick)
+//       // LoRa: reset chip
+//       log_d("Resetting the LoRa chip after %d reboots (current reboot %d)...", noResetsToEraseLoRaWANState, bootCount);
+//       LoRaChipReset();
+//#endif
+//     }
 
-    // Show free memory
-    //Internal RAM
-    //uint32_t getHeapSize();     // total heap size
-    //uint32_t getFreeHeap();     // available heap
-    //uint32_t getMinFreeHeap();  // lowest level of free heap since boot
-    //uint32_t getMaxAllocHeap(); // largest block of heap that can be allocated at once
-
-    uint32_t tmp =  ESP.getHeapSize();
+    // To check memory leaks
+    uint32_t tmp =  ESP.getHeapSize();   // total heap size
     log_d("Heap size:         %d", tmp);
-    tmp =  ESP.getFreeHeap();
+    tmp =  ESP.getFreeHeap();            // available heap
     log_d("Free heap:         %d", tmp); 
-    tmp = ESP.getMinFreeHeap();
+    tmp = ESP.getMinFreeHeap();          // lowest level of free heap since boot
     log_d("Min free heap:     %d", tmp); 
-    tmp = ESP.getMaxAllocHeap();
+    tmp = ESP.getMaxAllocHeap();         // largest block of heap that can be allocated at once
     log_d("Max block of heap: %d", tmp); 
-
-    // Starting execution
-    log_d("BresserLoRaWAN.ino: setup() [boot count: %d]", bootCount);
 
     // set up the log; do this fisrt.
     myEventLog.setup();
 
     // set up lorawan.
+    LoRaChipReset();
     myLoRaWAN.setup();
 
     // similarly, set up the sensor.
@@ -358,6 +355,14 @@ void loop() {
 |
 \****************************************************************************/
 
+void LoRaChipReset(void) {
+    log_d("Resetting LoRa chip...");
+    pinMode(PIN_LMIC_RST, OUTPUT);
+    digitalWrite(PIN_LMIC_RST, LOW);
+    delay(100);
+    digitalWrite(PIN_LMIC_RST, HIGH);
+}
+
 // our setup routine does the class setup and then registers an event handler so
 // we can see some interesting things
 void
@@ -387,7 +392,10 @@ cMyLoRaWAN::setup() {
                     0,
                     // the print-out function
                     [](cEventLog::EventNode_t const *pEvent) -> void {
-                        log_d(" TX:");
+#if CORE_DEBUG_LEVEL >= ARDUHAL_LOG_LEVEL_DEBUG
+                        DEBUG_PRINTF(" TX:");
+                        //log_d(" TX:");
+#endif
                         myEventLog.printCh(std::uint8_t(pEvent->getData(0)));
                         myEventLog.printRps(rps_t(pEvent->getData(1)));
                     }
@@ -599,14 +607,11 @@ cSensor::setup(std::uint32_t uplinkPeriodMs) {
     int16_t errorOnWeatherSensor = true;
     errorOnWeatherSensor = weatherSensor.begin();
     while (errorOnWeatherSensor != RADIOLIB_ERR_NONE) {
-#if defined(ARDUINO_heltec_wireless_stick)
-      // LoRa: reset chip
-      log_d("Error on weatherSensor.begin(), reseting the LoRa chip and retrying after %d ms...", waitTimeForSensorInitialization);
-      pinMode(PIN_LMIC_RST, OUTPUT);
-      digitalWrite(PIN_LMIC_RST, LOW);
-      delay(100);
-      digitalWrite(PIN_LMIC_RST, HIGH);
-#endif
+// #if defined(ARDUINO_heltec_wireless_stick)
+//       // LoRa: reset chip
+//       log_d("Error on weatherSensor.begin(), resetting the LoRa chip and retrying after %d ms...", waitTimeForSensorInitialization);
+//       LoRaChipReset();
+// #endif
       log_d("Error on weather sensor initialization (%d), trying again after %d seconds...", errorOnWeatherSensor, waitTimeForSensorInitialization);
       delay(waitTimeForSensorInitialization);
       errorOnWeatherSensor = weatherSensor.begin();
@@ -666,62 +671,64 @@ cSensor::printWeatherStationData() {
     // This example uses only a single slot in the sensor data array
     int const i=0;
 
-    log_d("Id: [%8X] Typ: [%X] Battery: [%s] ",
+#if CORE_DEBUG_LEVEL >= ARDUHAL_LOG_LEVEL_DEBUG
+    DEBUG_PRINTF("Id: [%8X] Typ: [%X] Battery: [%s] ",
         weatherSensor.sensor[i].sensor_id,
         weatherSensor.sensor[i].s_type,
         weatherSensor.sensor[i].battery_ok ? "OK " : "Low");
     #ifdef BRESSER_6_IN_1
-        log_d("Ch: [%d] ", weatherSensor.sensor[i].chan);
+        DEBUG_PRINTF("Ch: [%d] ", weatherSensor.sensor[i].chan);
     #endif
     if (weatherSensor.sensor[i].temp_ok) {
-        log_d("Temp: [%5.1fC] ",
+        DEBUG_PRINTF("Temp: [%5.1fC] ",
             weatherSensor.sensor[i].temp_c);
     } else {
-        log_d("Temp: [---.-C] ");
+        DEBUG_PRINTF("Temp: [---.-C] ");
     }
     if (weatherSensor.sensor[i].humidity_ok) {
-        log_d("Hum: [%3d%%] ",
+        DEBUG_PRINTF("Hum: [%3d%%] ",
             weatherSensor.sensor[i].humidity);
     } else {
-        log_d("Hum: [---%%] ");
+        DEBUG_PRINTF("Hum: [---%%] ");
     }
     if (weatherSensor.sensor[i].wind_ok) {
-        log_d("Wind max: [%4.1fm/s] Wind avg: [%4.1fm/s] Wind dir: [%5.1fdeg] ",
+        DEBUG_PRINTF("Wind max: [%4.1fm/s] Wind avg: [%4.1fm/s] Wind dir: [%5.1fdeg] ",
                 weatherSensor.sensor[i].wind_gust_meter_sec,
                 weatherSensor.sensor[i].wind_avg_meter_sec,
                 weatherSensor.sensor[i].wind_direction_deg);
     } else {
-        log_d("Wind max: [--.-m/s] Wind avg: [--.-m/s] Wind dir: [---.-deg] ");
+        DEBUG_PRINTF("Wind max: [--.-m/s] Wind avg: [--.-m/s] Wind dir: [---.-deg] ");
     }
     if (weatherSensor.sensor[i].rain_ok) {
-        log_d("Rain: [%7.1fmm] ",  
+        DEBUG_PRINTF("Rain: [%7.1fmm] ",  
             weatherSensor.sensor[i].rain_mm);
     } else {
-        log_d("Rain: [-----.-mm] "); 
+        DEBUG_PRINTF("Rain: [-----.-mm] "); 
     }
     if (weatherSensor.sensor[i].moisture_ok) {
-        log_d("Moisture: [%2d%%] ",
+        DEBUG_PRINTF("Moisture: [%2d%%] ",
             weatherSensor.sensor[i].moisture);
     } else {
-        log_d("Moisture: [--%%] ");
+        DEBUG_PRINTF("Moisture: [--%%] ");
     }
     #if defined BRESSER_6_IN_1 || defined BRESSER_7_IN_1
     if (weatherSensor.sensor[i].uv_ok) {
-        log_d("UV index: [%1.1f] ",
+        DEBUG_PRINTF("UV index: [%1.1f] ",
             weatherSensor.sensor[i].uv);
     } else {
-        log_d("UV index: [-.-%%] ");
+        DEBUG_PRINTF("UV index: [-.-%%] ");
     }
     #endif
     #ifdef BRESSER_7_IN_1
     if (weatherSensor.sensor[i].light_ok) {
-        log_d("Light (Klux): [%2.1fKlux] ",
+        DEBUG_PRINTF("Light (Klux): [%2.1fKlux] ",
             weatherSensor.sensor[i].light_klx);
     } else {
-        log_d("Light (lux): [--.-Klux] ");
+        DEBUG_PRINTF("Light (lux): [--.-Klux] ");
     }
     #endif      
-    log_d("RSSI: [%5.1fdBm]", weatherSensor.sensor[i].rssi);
+    DEBUG_PRINTF("RSSI: [%5.1fdBm]", weatherSensor.sensor[i].rssi);
+#endif
 }
 
 // -------------------------------------------
