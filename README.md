@@ -7,6 +7,7 @@ Features:
 - Weather data received periodically (check `data to be configured` in the program) and sent over LoRaWAN
 - Deep sleep between transmissions to reduce power consumption
 - Using RTC memory for maintaing LoRaWAN session data between reboots
+- Reset LoRa chip after reboot to avoid problems with chip initilization (**this depends on the board, done for [Heltec Wireless Stick](https://heltec.org/project/wireless-stick/)**)
 - Timeouts and watchdog timer to prevent the program from hanging
 - [Cayenne LPP](https://github.com/ElectronicCats/CayenneLPP) (low power payload) encoding for weather data
 
