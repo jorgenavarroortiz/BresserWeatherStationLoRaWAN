@@ -1,12 +1,21 @@
 # BresserWeatherSensorReceiver with Bresser 7-in-1 decoder
 
-This repository is based on [matthias-bs' BresserWeatherSensorReceiver repo](https://github.com/matthias-bs/BresserWeatherSensorReceiver). Its main addition is to include the Bresser 7-in-1 decoder, since matthias-bs' repo only includes the decoders for Bresser 5-in-1/6-in-1.
+This repository is based on [matthias-bs' BresserWeatherSensorReceiver repo](https://github.com/matthias-bs/BresserWeatherSensorReceiver). We have included the Bresser 7-in-1 decoder, since matthias-bs' repo only included the decoders for Bresser 5-in-1/6-in-1.
 
-Tested with the `BresserWeatherSensorBasic.ino` example and with the following equipment:
+Features:
+- Added Bresser 7-in-1 decoder
+- Weather data received periodically (check `data to be configured` in the program) and sent over LoRaWAN
+- Deep sleep between transmissions to reduce power consumption
+- Using RTC memory for maintaing LoRaWAN session data between reboots
+- Timeouts and watchdog timer included to prevent the program from hanging
+- [Cayenne LPP](https://github.com/ElectronicCats/CayenneLPP) (low power payload) encoding for weather data
+
+Tested with the following equipment:
+- [Heltec Wireless Stick](https://heltec.org/project/wireless-stick/)
 - [BRESSER 7-in-1 ClimateConnect Tuya Smart Home Weather Station](https://www.bresser.de/en/Weather-Time/BRESSER-7-in-1-ClimateConnect-Tuya-Smart-Home-Weather-Station.html)
 - [BRESSER professional 7-in-1 Wi-Fi Weather Station with Light Intensity and UV Measurement Function](https://www.bresser.de/en/Weather-Time/Weather-Center/BRESSER-professional-7-in-1-Wi-Fi-Weather-Station-with-Light-Intensity-and-UV-Measurement-Function.html). Data available at [Weather Underground](https://www.wunderground.com/dashboard/pws/IGRANA86), [Weather Cloud](https://app.weathercloud.net/d4424986045#current) and [AWEKAS](https://stationsweb.awekas.at/index.php?id=27737).
 
-These stations also includes a light sensor, compared to the 6-in-1 weather stations. The microcontroller was a [Heltec Wireless Stick](https://heltec.org/project/wireless-stick/), which has an SX1276 LoRa chip with the same pinout than the TTGO LoRa32-OLED v2.1.6 board (already supported by mattias-bs' repo and selected as the board in the Arduino IDE).
+These stations also includes a light sensor, compared to the 6-in-1 weather stations. The microcontroller was a [Heltec Wireless Stick](https://heltec.org/project/wireless-stick/), which has an SX1276 LoRa chip.
 
 In order to include the Bresser 7-in-1 decoder, I employed the [decoder from RTL_433](https://github.com/merbanan/rtl_433/blob/master/src/devices/bresser_7in1.c) adapted to this repository (similar to the work done by mattias-bs for the Bresser 5-in-1 and 6-in-1 decoders).
 
