@@ -7,7 +7,7 @@ Features:
 - Weather data received periodically (check `data to be configured` in the program) and sent over LoRaWAN
 - Deep sleep between transmissions to reduce power consumption
 - Using RTC memory for maintaing LoRaWAN session data between reboots
-- Timeouts and watchdog timer included to prevent the program from hanging
+- Timeouts and watchdog timer to prevent the program from hanging
 - [Cayenne LPP](https://github.com/ElectronicCats/CayenneLPP) (low power payload) encoding for weather data
 
 Tested with the following equipment:
