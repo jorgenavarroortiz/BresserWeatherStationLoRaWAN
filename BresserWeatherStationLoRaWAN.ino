@@ -12,16 +12,19 @@ Features:
   - ESP32 WatchDog Timer (WDT) to avoid infinite hangs
   - Using Cayenne Low Power Payload (LLP) encoding to send weather station data
   - Check memory leaks (memory heap size after each reboot)
+  - Showing relevant information on the OLED display (program version, number of boots, number of valid WS data received, number of LoRaWAN messages sent)
 
 TO DO:
   - Check the time between messages (deep sleeps)... there is some deviation
-  - OLED
 
 */
 
-// ---------
-// Libraries
-// ---------
+// -------------------------
+// Libraries and definitions
+// -------------------------
+#define WSVERSION "WS v1.0"
+#define OLED_EN
+
 #include <esp_task_wdt.h>  // For ESP32 watch dog timer
 #include "esp32/rom/rtc.h" // To get reset reason
 
@@ -34,6 +37,12 @@ TO DO:
 #define CAYENNELPPSIZE 51
 
 CayenneLPP lpp(CAYENNELPPSIZE);
+
+#ifdef OLED_EN
+// For OLED
+#include <Wire.h>
+#include "SSD1306Wire.h"
+#endif
 
 // For the Bresser weather station
 #include <Arduino.h>
@@ -53,7 +62,7 @@ static const std::int32_t intervalBetweenTransmissions    = 2 * 60 * 1000;  // m
 static const std::int32_t         minimumDeepSleepTime    = 5 * 1000;       // ms
 static const std::int32_t                 maxAwakeTime    = 30 * 60 * 1000; // ms
 static const std::int32_t timeToSleepAfterMaxAwakeTime    = 30 * 60 * 1000; // ms
-static const std::int32_t  noResetsToEraseLoRaWANState    = 10;             // After this number of resets, the LoRaWAN state will be reset
+//static const std::int32_t  noResetsToEraseLoRaWANState    = 10;             // After this number of resets, the LoRaWAN state will be reset. 0 to disable this.
 static const std::int32_t waitTimeForSensorInitialization = 2000;           // ms (for retries)
 
 // deveui, little-endian
@@ -90,8 +99,11 @@ const uint8_t PAYLOAD_SIZE = 51;
 // The following variables are stored in the ESP32's RTC RAM -
 // their value is retained after a Sleep Reset.
 // JNa: RTC_DATA_ATTR not working, not preserving data on reboot after deep sleep
-RTC_NOINIT_ATTR int32_t                        bootCount;
-RTC_NOINIT_ATTR uint32_t                        magicFlag1;               //!< flag for validating Session State in RTC RAM 
+RTC_NOINIT_ATTR int32_t                         bootCount;
+RTC_NOINIT_ATTR int32_t                         validDataCount;
+RTC_NOINIT_ATTR int32_t                         lorawanMessagesCount;
+RTC_NOINIT_ATTR float                           lastRSSI;
+RTC_NOINIT_ATTR uint32_t                        magicFlag1;               //!< flag for validating Session State in RTC RAM
 RTC_NOINIT_ATTR Arduino_LoRaWAN::SessionState   rtcSavedSessionState;     //!< Session State saved in RTC RAM
 RTC_NOINIT_ATTR uint32_t                        magicFlag2;               //!< flag for validating Session Info in RTC RAM 
 RTC_NOINIT_ATTR Arduino_LoRaWAN::SessionInfo    rtcSavedSessionInfo;      //!< Session Info saved in RTC RAM
@@ -191,6 +203,11 @@ private:
 |
 \****************************************************************************/
 
+#ifdef OLED_EN
+// OLED
+SSD1306Wire display(0x3c, 4, 15, GEOMETRY_64_32);
+#endif
+
 // Pin mapping
 const cMyLoRaWAN::lmic_pinmap myPinMap = {
   .nss = PIN_LMIC_NSS,
@@ -271,40 +288,46 @@ void setup() {
 //    while (! Serial)
 //        yield();
 
+    // Print program version
+    log_d("Starting %s...", WSVERSION);
+
     // WatchDog Timer
-    log_d("Configuring WDT (%d s)...", WDT_TIMEOUT);
+    log_d("Configuring WDT (%d s)", WDT_TIMEOUT);
     esp_task_wdt_init(WDT_TIMEOUT, true); //enable panic so ESP32 restarts
     esp_task_wdt_add(NULL);               //add current thread to WDT watch
 
-    // JNa: tested empirically on a Heltec Wireless Stick board. It should be POWERON_RESET, but it is not.
+    // JNa: tested empirically on a Heltec Wireless Stick board. It should be just POWERON_RESET, but it is not.
     int resetReason = (int) rtc_get_reset_reason(0);
     if ((resetReason == RTCWDT_RTC_RESET) || (resetReason == POWERON_RESET))
     {
-      // First time after powering on the board... RTCWDT_RTC_RESET=16, i.e. RTC Watch dog reset digital core and rtc module
-      delay(2000); // So the following messages are shown in Arduino's serial monitor...
+      // First time after powering on the board
+      delay(2000);
       log_d("Power on reset (reason %d)", resetReason);
 	    bootCount = 0;
+      validDataCount = 0;
+      lorawanMessagesCount = 0;
+      lastRSSI = 0.0;
     } else if (resetReason == TG0WDT_SYS_RESET || resetReason == DEEPSLEEP_RESET || resetReason == SW_RESET) {
       log_d("Reset due to deep sleep (reason %d)", resetReason);
       bootCount++;
     } else {
-      // Other reasons should be problematic...
-      log_d("Other reason for reset (reason %d), erasing LoRaWAN state...", resetReason);
+      // Other reasons should be problematic
+      log_d("Other reason for reset (reason %d), erasing LoRaWAN state", resetReason);
       bootCount++;
       magicFlag1 = 0;
       magicFlag2 = 0;
     }
     log_d("Boot count: %d", bootCount);
 
-//     if ((bootCount % noResetsToEraseLoRaWANState) == 0) {
-//       log_d("Erasing LoRaWAN state after %d resets...", noResetsToEraseLoRaWANState);
+//     if ((noResetsToEraseLoRaWANState != 0) && ((bootCount % noResetsToEraseLoRaWANState) == 0)) {
+//       log_d("Erasing LoRaWAN state after %d resets", noResetsToEraseLoRaWANState);
 //       magicFlag1 = 0;
 //       magicFlag2 = 0;
-//#if defined(ARDUINO_heltec_wireless_stick)
+// #if defined(ARDUINO_heltec_wireless_stick)
 //       // LoRa: reset chip
-//       log_d("Resetting the LoRa chip after %d reboots (current reboot %d)...", noResetsToEraseLoRaWANState, bootCount);
-//       LoRaChipReset();
-//#endif
+//       log_d("Resetting the LoRa chip after %d reboots (current reboot %d)", noResetsToEraseLoRaWANState, bootCount);
+//       LoRaChipResetHeltec();
+// #endif
 //     }
 
     // To check memory leaks
@@ -317,11 +340,23 @@ void setup() {
     tmp = ESP.getMaxAllocHeap();         // largest block of heap that can be allocated at once
     log_d("Max block of heap: %d", tmp); 
 
+#ifdef OLED_EN
+    // OLED display
+  #if defined(ARDUINO_heltec_wireless_stick)
+    OLEDResetHeltec();
+  #endif
+    display.init();
+    display.flipScreenVertically();
+    OLEDShowInformation();
+#endif
+
     // set up the log; do this fisrt.
     myEventLog.setup();
 
     // set up lorawan.
-    LoRaChipReset();
+#if defined(ARDUINO_heltec_wireless_stick)
+    LoRaChipResetHeltec();
+#endif
     myLoRaWAN.setup();
 
     // similarly, set up the sensor.
@@ -336,7 +371,7 @@ void setup() {
 
 void loop() {
     if (millis() - lastTimeWDTReset >= (1000*WDT_RESET)) {
-      log_d("Resetting WDT (after %d s)...", WDT_RESET);
+      log_d("Resetting WDT (after %d s)", WDT_RESET);
       esp_task_wdt_reset();
       lastTimeWDTReset = millis();
     }
@@ -351,12 +386,41 @@ void loop() {
 
 /****************************************************************************\
 |
+|	OLED methods
+|
+\****************************************************************************/
+
+#ifdef OLED_EN
+void OLEDResetHeltec(void) {
+//  log_d("Resetting OLED");
+  pinMode(16, OUTPUT);
+  digitalWrite(16, LOW);
+  delay(100);
+  digitalWrite(16, HIGH);
+}
+
+void OLEDShowInformation(void) {
+    display.clear();
+    display.drawString(0, 0, WSVERSION);
+    display.drawString(0, 10, String(bootCount) + ", " + String(validDataCount) + ", " + String(lorawanMessagesCount)); // There is no space left for anything else...
+    float epsilon = 0.001;
+    if ((lastRSSI < epsilon) && (lastRSSI > (-1*epsilon))) {
+      display.drawString(0, 20, "RSSI: -");
+    } else {
+      display.drawString(0, 20, "RSSI: " + String(lastRSSI));
+    }
+    display.display();
+}
+#endif
+
+/****************************************************************************\
+|
 |	LoRaWAN methods
 |
 \****************************************************************************/
 
-void LoRaChipReset(void) {
-    log_d("Resetting LoRa chip...");
+void LoRaChipResetHeltec(void) {
+    log_d("Resetting LoRa chip");
     pinMode(PIN_LMIC_RST, OUTPUT);
     digitalWrite(PIN_LMIC_RST, LOW);
     delay(100);
@@ -371,8 +435,6 @@ cMyLoRaWAN::setup() {
     // simply call begin() w/o parameters, and the LMIC's built-in
     // configuration for this board will be used.
     this->Super::begin(myPinMap);
-
-    //LMIC_reset(); // JNa, testing
 
 //    LMIC_selectSubBand(0);
     LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
@@ -438,7 +500,7 @@ cMyLoRaWAN::NetJoin(void) {
 void
 cMyLoRaWAN::NetTxComplete(void) {
     sleepReq = true;
-    log_d("Transmission complete, going to deep sleep...");
+    log_d("Transmission complete, going to deep sleep");
 }
 
 // Print session info for debugging
@@ -607,12 +669,12 @@ cSensor::setup(std::uint32_t uplinkPeriodMs) {
     int16_t errorOnWeatherSensor = true;
     errorOnWeatherSensor = weatherSensor.begin();
     while (errorOnWeatherSensor != RADIOLIB_ERR_NONE) {
-// #if defined(ARDUINO_heltec_wireless_stick)
-//       // LoRa: reset chip
-//       log_d("Error on weatherSensor.begin(), resetting the LoRa chip and retrying after %d ms...", waitTimeForSensorInitialization);
-//       LoRaChipReset();
-// #endif
-      log_d("Error on weather sensor initialization (%d), trying again after %d seconds...", errorOnWeatherSensor, waitTimeForSensorInitialization);
+#if defined(ARDUINO_heltec_wireless_stick)
+      // LoRa: reset chip
+      log_d("Error on weatherSensor.begin(), resetting the LoRa chip and retrying after %d ms", waitTimeForSensorInitialization);
+      LoRaChipResetHeltec();
+#endif
+      log_d("Error on weather sensor initialization (%d), trying again after %d seconds", errorOnWeatherSensor, waitTimeForSensorInitialization);
       delay(waitTimeForSensorInitialization);
       errorOnWeatherSensor = weatherSensor.begin();
     }
@@ -756,6 +818,7 @@ cSensor::doUplink(void) {
     lpp.reset();
     lpp.addDigitalInput(0, (uint8_t) bWeatherData); // 0 = no data, 1 = there is valid weather data
     if (bWeatherData) {
+        validDataCount++;
         printWeatherStationData();
         log_d("Sending valid weather data");
 
@@ -779,13 +842,14 @@ cSensor::doUplink(void) {
             lpp.addAnalogInput(10, weatherSensor.sensor[i].uv);
         if (weatherSensor.sensor[i].light_ok)
             lpp.addAnalogInput(11, weatherSensor.sensor[i].light_klx);
-        lpp.addAnalogInput(11, weatherSensor.sensor[i].rssi);
+        lpp.addAnalogInput(12, weatherSensor.sensor[i].rssi);
+        lastRSSI = weatherSensor.sensor[i].rssi;
     } else {
       log_d("Sending invalid weather data indication");
     }
 
     this->m_fBusy = true;
-    
+    lorawanMessagesCount++;
     if (! myLoRaWAN.SendBuffer(
         lpp.getBuffer(), lpp.getSize(),
         // this is the completion function:
