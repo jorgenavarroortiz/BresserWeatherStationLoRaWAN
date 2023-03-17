@@ -27,19 +27,9 @@ TO DO:
 #define NODE 1
 // OLED display (enabled or not)
 #define OLED_EN
-// Enable resetting SX1276 (it seems it does not work anyway)
-#define RESETSX1276
 // Watchdog timer
 #define WDT_TIMEOUT 180
 #define WDT_RESET 150
-// Brownout detector (disabled or not)
-//#define BROWNOUT_DI 
-
-#ifdef BROWNOUT_DI
-// To disable brownout detection
-#include "soc/soc.h"
-#include "soc/rtc_cntl_reg.h"
-#endif
 
 #include <Arduino.h>
 
@@ -54,9 +44,9 @@ static const std::int32_t    timeToSleepAfterMaxAwakeTime = 30 * 60 * 1000; // m
 static std::int32_t          noRebootsToEraseLoRaWANState = int32_t(24*60*60*1000 / intervalBetweenTransmissions); // Approx. once every 24h. After this number of resets, the LoRaWAN state will be reset. 0 to disable this.
 static const std::int32_t waitTimeForSensorInitialization = 2000;           // ms (for retries)
 
-
-#include <esp_task_wdt.h>  // For ESP32 watch dog timer
-#include "esp32/rom/rtc.h" // To get reset reason
+// For ESP32 WDT and reset reason
+#include <esp_task_wdt.h>
+#include "esp32/rom/rtc.h"
 
 // For Cayenne Low Power Payload (LPP) encoding
 #include <CayenneLPP.h>
@@ -278,10 +268,10 @@ void checkGoingToSleep(void) {
       } else {
         log_d("Requested going to deep sleep after LoRaWAN transmission complete! Sleep time is %d ms.", timeToSleep);
       }
-      //log_d("LoRaWAN.Shutdown()");
 
+      //log_d("LoRaWAN.Shutdown()");
       //myLoRaWAN.Shutdown();
-      delay(2000);
+      //delay(2000);
       ESP.deepSleep(timeToSleep * 1000); // usec
   }
 
@@ -289,10 +279,10 @@ void checkGoingToSleep(void) {
       // Too much time awake!
 
       log_d("Max awake timer expired! (time from boot %d ms, max awake time %d ms)");
-      //log_d("LoRaWAN.Shutdown()");
 
+      //log_d("LoRaWAN.Shutdown()");
       //myLoRaWAN.Shutdown();
-      delay(2000);
+      //delay(2000);
       ESP.deepSleep(timeToSleepAfterMaxAwakeTime * 1000);
   }
 }
@@ -318,12 +308,6 @@ void setup() {
     // Print program version
     log_d("Node %d starting %s...", NODE, WSVERSION);
 
-#ifdef BROWNOUT_DI
-    // Disable brownout detection (it may generate problems with deep sleep, to be checked, see https://www.esp32.com/viewtopic.php?f=13&t=19208)
-    log_d("Disabling brownout detection");
-    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
-#endif
-
     // WatchDog Timer
     log_d("Configuring WDT (%d s)", WDT_TIMEOUT);
     esp_task_wdt_init(WDT_TIMEOUT, true); //enable panic so ESP32 restarts
@@ -334,7 +318,6 @@ void setup() {
     if ((resetReason == RTCWDT_RTC_RESET) || (resetReason == POWERON_RESET))
     {
       // First time after powering on the board
-      delay(2000);
       log_d("Power on reset (reason %d)", resetReason);
       bootCount = 0;
       validDataCount = 0;
@@ -392,9 +375,7 @@ void setup() {
 
     // set up lorawan.
 #if defined(ARDUINO_heltec_wireless_stick)
-#if defined(RESETSX1276)
     LoRaChipResetHeltec();
-#endif
 #endif
     myLoRaWAN.setup();
 
@@ -462,7 +443,7 @@ void LoRaChipResetHeltec(void) {
     log_d("Resetting LoRa chip");
     pinMode(PIN_LMIC_RST, OUTPUT);
     digitalWrite(PIN_LMIC_RST, LOW);
-    delay(1500);
+    delay(100);
     digitalWrite(PIN_LMIC_RST, HIGH);
 }
 
@@ -495,7 +476,6 @@ cMyLoRaWAN::setup() {
                     [](cEventLog::EventNode_t const *pEvent) -> void {
 #if CORE_DEBUG_LEVEL >= ARDUHAL_LOG_LEVEL_DEBUG
                         DEBUG_PRINTF(" TX:");
-                        //log_d(" TX:");
 #endif
                         myEventLog.printCh(std::uint8_t(pEvent->getData(0)));
                         myEventLog.printRps(rps_t(pEvent->getData(1)));
@@ -708,21 +688,9 @@ cSensor::setup(std::uint32_t uplinkPeriodMs) {
     int16_t errorOnWeatherSensor = true;
     errorOnWeatherSensor = weatherSensor.begin();
 
-    while (errorOnWeatherSensor != RADIOLIB_ERR_NONE) {
+    if (errorOnWeatherSensor != RADIOLIB_ERR_NONE) {
       log_d("Restarting ESP32");
       ESP.restart();
-
-      log_d("Error on weather sensor initialization (%d), trying again after 1 second", errorOnWeatherSensor, waitTimeForSensorInitialization);
-#if defined(ARDUINO_heltec_wireless_stick)
-  #if defined(RESETSX1276)
-      // LoRa: reset chip
-      log_d("Resetting the LoRa chip and retrying after 1 seconds", waitTimeForSensorInitialization);
-      delay(1000);
-      LoRaChipResetHeltec();
-  #endif
-#endif
-      delay(1000);
-      errorOnWeatherSensor = weatherSensor.begin();
     }
 
     // set the initial time.
