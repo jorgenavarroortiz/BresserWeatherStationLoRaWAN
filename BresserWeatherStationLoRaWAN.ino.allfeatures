@@ -24,11 +24,15 @@ TO DO:
 // Libraries and definitions
 // -------------------------
 #define WSVERSION "WS v1.0"
-#define NODE 1
+#define NODE 2
 // OLED display (enabled or not)
 #define OLED_EN
+// Enable reset using GPIOxx connected to RST if there is a bad SX1276 chip initialization (on weatherSensor.begin())
+// GPIOs 2 (led), 4 (not working), 12 (not working, causing RTCWDT_RTC_RESET), 13 (not working), -15, -17, -23, 32, 33, -34, -35, 37 (input), 38 (input) and 39 (input) are connected to 10K pullup resistors -> from http://community.heltec.cn/t/problems-with-wirwlwaa-stick-and-wireless-stick-lite/11324
+//#define RESET_GPIO_EN
+#define RESET_GPIO_PIN 13
 // Enable resetting SX1276 (it seems it does not work anyway)
-#define RESETSX1276
+#define resetSX1276
 // Watchdog timer
 #define WDT_TIMEOUT 180
 #define WDT_RESET 150
@@ -119,6 +123,7 @@ const uint8_t PAYLOAD_SIZE = 51;
 // RTC Memory Handling
 #define MAGIC1 (('m' << 24) | ('g' < 16) | ('c' << 8) | '1')
 #define MAGIC2 (('m' << 24) | ('g' < 16) | ('c' << 8) | '2')
+#define MAGIC3 (('m' << 24) | ('g' < 16) | ('c' << 8) | '2') // For reset using the RST pin of the ESP32
 #define EXTRA_INFO_MEM_SIZE 64
 
 // The following variables are stored in the ESP32's RTC RAM -
@@ -298,6 +303,17 @@ void checkGoingToSleep(void) {
 }
 
 
+void resetUsingGPIO(int resetGPIOpin) {
+  magicFlag3 = MAGIC3;
+
+  log_d("Resetting the ESP32 using GPIO %d connected to RST", resetGPIOpin);
+
+  //ESP.restart();
+  pinMode(resetGPIOpin, OUTPUT);
+  delay(100);
+  digitalWrite(resetGPIOpin, LOW);  
+}
+
 /****************************************************************************\
 |
 |	setup()
@@ -318,6 +334,9 @@ void setup() {
     // Print program version
     log_d("Node %d starting %s...", NODE, WSVERSION);
 
+    // TESTING...
+    resetUsingGPIO(RESET_GPIO_PIN);
+
 #ifdef BROWNOUT_DI
     // Disable brownout detection (it may generate problems with deep sleep, to be checked, see https://www.esp32.com/viewtopic.php?f=13&t=19208)
     log_d("Disabling brownout detection");
@@ -335,11 +354,22 @@ void setup() {
     {
       // First time after powering on the board
       delay(2000);
-      log_d("Power on reset (reason %d)", resetReason);
-      bootCount = 0;
-      validDataCount = 0;
-      lorawanMessagesCount = 0;
-      lastRSSI = 0.0;
+
+#ifdef RESET_GPIO_EN
+      if (magicFlag3 != MAGIC3) {
+#endif
+          log_d("Power on reset (reason %d)", resetReason);
+	        bootCount = 0;
+          validDataCount = 0;
+          lorawanMessagesCount = 0;
+          lastRSSI = 0.0;
+#ifdef RESET_GPIO_EN
+      } else {
+        log_d("Power on reset due to bad SX1276 initialization during weatherSensor.begin() (reason %d)", resetReason);
+        magicFlag3 = 0;
+        bootCount++;
+      }
+#endif
     } else if (resetReason == TG0WDT_SYS_RESET || resetReason == DEEPSLEEP_RESET || resetReason == SW_RESET) {
       log_d("Reset due to deep sleep (reason %d)", resetReason);
       bootCount++;
@@ -365,6 +395,12 @@ void setup() {
       log_d("Erasing LoRaWAN state after %d reboots (current boot %d)", noRebootsToEraseLoRaWANState, bootCount);
       magicFlag1 = 0;
       magicFlag2 = 0;
+#if defined(ARDUINO_heltec_wireless_stick)
+  #if defined(resetSX1276)
+      // LoRa: reset chip
+      LoRaChipResetHeltec();
+  #endif
+#endif
     }
 
     // To check memory leaks
@@ -392,7 +428,7 @@ void setup() {
 
     // set up lorawan.
 #if defined(ARDUINO_heltec_wireless_stick)
-#if defined(RESETSX1276)
+#if defined(resetSX1276)
     LoRaChipResetHeltec();
 #endif
 #endif
@@ -709,20 +745,22 @@ cSensor::setup(std::uint32_t uplinkPeriodMs) {
     errorOnWeatherSensor = weatherSensor.begin();
 
     while (errorOnWeatherSensor != RADIOLIB_ERR_NONE) {
-      log_d("Restarting ESP32");
-      ESP.restart();
-
+#ifdef RESET_GPIO_EN
+      log_d("Error on weather sensor initialization (%d)", errorOnWeatherSensor);
+      resetUsingGPIO(RESET_GPIO_PIN);
+#else
       log_d("Error on weather sensor initialization (%d), trying again after 1 second", errorOnWeatherSensor, waitTimeForSensorInitialization);
-#if defined(ARDUINO_heltec_wireless_stick)
-  #if defined(RESETSX1276)
+  #if defined(ARDUINO_heltec_wireless_stick)
+    #if defined(resetSX1276)
       // LoRa: reset chip
       log_d("Resetting the LoRa chip and retrying after 1 seconds", waitTimeForSensorInitialization);
       delay(1000);
       LoRaChipResetHeltec();
+    #endif
   #endif
-#endif
       delay(1000);
       errorOnWeatherSensor = weatherSensor.begin();
+#endif
     }
 
     // set the initial time.
